@@ -1,0 +1,20 @@
+--- app/src/main/java/com/arifur/amartube/ui/navigation/AppNavigation.kt
++++ app/src/main/java/com/arifur/amartube/ui/navigation/AppNavigation.kt
+@@ -71,6 +71,17 @@
+                     }
+                 )
+             }
++            composable(
++                route = "music_player/{url}",
++                arguments = listOf(navArgument("url") { type = NavType.StringType })
++            ) { backStackEntry ->
++                val encodedUrl = backStackEntry.arguments?.getString("url") ?: ""
++                val decodedUrl = URLDecoder.decode(encodedUrl, "UTF-8")
++                MusicPlayerScreen(
++                    url = decodedUrl,
++                    onBack = { navController.popBackStack() }
++                )
++            }
+         }
+     }
+ }
