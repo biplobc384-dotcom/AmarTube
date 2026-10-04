@@ -10,6 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
@@ -58,14 +60,23 @@ fun MusicScreen(viewModel: MusicViewModel = viewModel(), onSongClick: (String) -
         // Rounded Search Bar
         OutlinedTextField(
             value = text,
-            onValueChange = { text = it },
+            onValueChange = { 
+                text = it 
+                viewModel.onSearchQueryChanged(it)
+            },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(56.dp),
             placeholder = { Text("Search songs, artists, albums...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { viewModel.searchMusic(text) }),
+            keyboardActions = KeyboardActions(onSearch = { 
+                viewModel.clearSuggestions()
+                viewModel.searchMusic(text) 
+            }),
             trailingIcon = {
-                IconButton(onClick = { viewModel.searchMusic(text) }) {
+                IconButton(onClick = { 
+                    viewModel.clearSuggestions()
+                    viewModel.searchMusic(text) 
+                }) {
                     Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary)
                 }
             },
@@ -79,6 +90,31 @@ fun MusicScreen(viewModel: MusicViewModel = viewModel(), onSongClick: (String) -
                 unfocusedTextColor = Color.White
             )
         )
+        
+        if (viewModel.searchSuggestions.isNotEmpty()) {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(max = 250.dp)
+            ) {
+                items(viewModel.searchSuggestions.size) { index ->
+                    val suggestion = viewModel.searchSuggestions[index]
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                text = suggestion
+                                viewModel.clearSuggestions()
+                                viewModel.searchMusic(suggestion)
+                            }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(suggestion, color = MaterialTheme.colorScheme.onBackground)
+                    }
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -86,6 +122,40 @@ fun MusicScreen(viewModel: MusicViewModel = viewModel(), onSongClick: (String) -
         Box(modifier = Modifier.fillMaxSize()) {
             if (viewModel.isLoading.value) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.primary)
+            } else if (viewModel.isNetworkError.value) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "No Network",
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "No Network Connection",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Please check your internet connection.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = { viewModel.searchMusic(viewModel.searchQuery.value) },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Refresh")
+                    }
+                }
             } else if (viewModel.errorMessage.value != null) {
                 Text(
                     text = "Error: ${viewModel.errorMessage.value}", 

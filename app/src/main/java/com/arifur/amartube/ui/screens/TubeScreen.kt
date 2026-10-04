@@ -10,8 +10,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,9 +35,8 @@ import org.schabi.newpipe.extractor.stream.StreamInfoItem
 @Composable
 fun TubeScreen(
     viewModel: TubeViewModel = viewModel(),
-    onVideoClick: (String) -> Unit = {}
+    onVideoClick: (String) -> Unit
 ) {
-    var isSearching by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf(viewModel.searchQuery.value) }
 
     LaunchedEffect(Unit) {
@@ -44,64 +45,118 @@ fun TubeScreen(
         }
     }
 
-    Scaffold(
-        containerColor = Color.Transparent,
-        topBar = {
-            if (isSearching) {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                    title = {
-                        OutlinedTextField(
-                            value = text,
-                            onValueChange = { text = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp),
-                            placeholder = { Text("Search LibreTube") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            keyboardActions = KeyboardActions(onSearch = {
-                                viewModel.searchVideos(text)
-                                isSearching = false
-                            }),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = TextFieldDefaults.colors(
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                            )
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { isSearching = false }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().background(MaterialTheme.colorScheme.background)) {
+        // Top Bar
+        TopAppBar(
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Tube", tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Tube Engine", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = MaterialTheme.colorScheme.onBackground)
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+        )
+
+        // Rounded Search Bar
+        OutlinedTextField(
+            value = text,
+            onValueChange = { 
+                text = it 
+                viewModel.onSearchQueryChanged(it)
+            },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(56.dp),
+            placeholder = { Text("Search videos, channels, playlists...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { 
+                viewModel.clearSuggestions()
+                viewModel.searchVideos(text) 
+            }),
+            trailingIcon = {
+                IconButton(onClick = { 
+                    viewModel.clearSuggestions()
+                    viewModel.searchVideos(text) 
+                }) {
+                    Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary)
+                }
+            },
+            shape = RoundedCornerShape(9999.dp), // Full pill
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                unfocusedIndicatorColor = Color(0x14FFFFFF),
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White
+            )
+        )
+        
+        if (viewModel.searchSuggestions.isNotEmpty()) {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(max = 250.dp)
+            ) {
+                items(viewModel.searchSuggestions.size) { index ->
+                    val suggestion = viewModel.searchSuggestions[index]
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                text = suggestion
+                                viewModel.clearSuggestions()
+                                viewModel.searchVideos(suggestion)
+                            }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(suggestion, color = MaterialTheme.colorScheme.onBackground)
                     }
-                )
-            } else {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                    title = {
-                        Text(
-                            text = "LibreTube",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    },
-                    actions = {
-                        IconButton(onClick = { isSearching = true }) {
-                            Icon(Icons.Default.Search, contentDescription = "Search")
-                        }
-                    }
-                )
+                }
             }
         }
-    ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Video Feed
+        Box(modifier = Modifier.fillMaxSize()) {
             if (viewModel.isLoading.value) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.primary)
+            } else if (viewModel.isNetworkError.value) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "No Network",
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "No Network Connection",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Please check your internet connection.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = { viewModel.searchVideos(viewModel.searchQuery.value) },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Refresh")
+                    }
+                }
             } else if (viewModel.errorMessage.value != null) {
                 Text(
                     text = "Error: ${viewModel.errorMessage.value}",
@@ -109,11 +164,7 @@ fun TubeScreen(
                     modifier = Modifier.align(Alignment.Center).padding(16.dp)
                 )
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
+                LazyColumn(contentPadding = PaddingValues(bottom = 120.dp, top = 8.dp)) {
                     itemsIndexed(viewModel.searchResults) { index, item ->
                         LibreTubeVideoItem(item = item, onClick = { onVideoClick(item.url) })
 
@@ -127,7 +178,7 @@ fun TubeScreen(
                     if (viewModel.isLoadingMore.value) {
                         item {
                             Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -142,9 +193,10 @@ fun LibreTubeVideoItem(item: StreamInfoItem, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column {
@@ -153,7 +205,7 @@ fun LibreTubeVideoItem(item: StreamInfoItem, onClick: () -> Unit) {
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                    .background(Color.DarkGray)
+                    .background(Color(0xFF202020))
             ) {
                 AsyncImage(
                     model = item.thumbnails.firstOrNull()?.url,
@@ -186,12 +238,12 @@ fun LibreTubeVideoItem(item: StreamInfoItem, onClick: () -> Unit) {
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = item.uploaderName.take(1).uppercase(),
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     )
@@ -204,6 +256,7 @@ fun LibreTubeVideoItem(item: StreamInfoItem, onClick: () -> Unit) {
                         text = item.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -225,4 +278,3 @@ fun LibreTubeVideoItem(item: StreamInfoItem, onClick: () -> Unit) {
         }
     }
 }
-

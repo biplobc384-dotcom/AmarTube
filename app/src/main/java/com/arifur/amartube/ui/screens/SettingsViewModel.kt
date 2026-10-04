@@ -15,6 +15,9 @@ class SettingsViewModel : ViewModel() {
     val updateMessage = mutableStateOf<String?>(null)
     val latestVersion = mutableStateOf<String?>(null)
     val downloadUrl = mutableStateOf<String?>(null)
+    
+    val downloadQuality = mutableStateOf("Ask each time")
+    val storageLocation = mutableStateOf("Internal Storage")
 
     private val client = OkHttpClient()
 

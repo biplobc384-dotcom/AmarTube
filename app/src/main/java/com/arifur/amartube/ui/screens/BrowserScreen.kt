@@ -16,11 +16,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -83,9 +83,9 @@ fun BrowserScreen(
                         ) {
                             // Lock Icon
                             Icon(Icons.Default.Lock, contentDescription = "Secure", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                            
+
                             Spacer(modifier = Modifier.width(8.dp))
-                            
+
                             // URL Text Field
                             BasicTextField(
                                 value = urlInput,
@@ -147,10 +147,21 @@ fun BrowserScreen(
                 onClick = {
                     val currentUrl = webView?.url
                     if (currentUrl != null) {
-                        webView?.evaluateJavascript(
-                            "(function() { return Array.from(document.querySelectorAll('video')).map(v => v.src || (v.querySelector('source') ? v.querySelector('source').src : '')).filter(Boolean).join(','); })();"
-                        ) { result ->
-                            val urls = result?.trim('"')?.split(",")?.filter { it.isNotBlank() && it != "null" } ?: emptyList()
+                        val jsSniffer = """
+                            (function() {
+                                var urls = [];
+                                document.querySelectorAll('video, audio, source').forEach(function(el) {
+                                    if (el.src) urls.push(el.src);
+                                });
+                                document.querySelectorAll('meta[property="og:video"], meta[property="og:video:url"], meta[property="og:video:secure_url"]').forEach(function(el) {
+                                    if (el.content) urls.push(el.content);
+                                });
+                                return Array.from(new Set(urls)).filter(Boolean).join(',');
+                            })();
+                        """.trimIndent()
+
+                        webView?.evaluateJavascript(jsSniffer) { result ->
+                            val urls = result?.trim('"')?.split(",")?.map { it.replace("\\/", "/") }?.filter { it.isNotBlank() && it != "null" } ?: emptyList()
                             downloaderViewModel.extractDownloadLinks(currentUrl, urls)
                         }
                     }
@@ -175,37 +186,47 @@ fun BrowserScreen(
                         settings.domStorageEnabled = true
                         settings.databaseEnabled = true
                         settings.loadsImagesAutomatically = true
-                        // Use default user agent but remove WebView specific tags to prevent bot detection
+
                         val defaultAgent = android.webkit.WebSettings.getDefaultUserAgent(ctx)
                         settings.userAgentString = defaultAgent.replace("; wv", "").replace("Version/4.0 ", "")
-                        
+
                         val webViewInstance = this
                         android.webkit.CookieManager.getInstance().apply {
                             setAcceptCookie(true)
                             setAcceptThirdPartyCookies(webViewInstance, true)
                         }
-                        
+
+                        // Direct File Download Interceptor
+                        setDownloadListener { downloadUrl, _, contentDisposition, mimetype, contentLength ->
+                            downloaderViewModel.handleDirectBrowserDownload(
+                                context = ctx,
+                                downloadUrl = downloadUrl,
+                                contentDisposition = contentDisposition,
+                                mimeType = mimetype,
+                                contentLength = contentLength
+                            )
+                        }
+
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                                 return false // Load all links inside this WebView
                             }
-                            
+
                             override fun onPageFinished(view: WebView?, loadedUrl: String?) {
                                 super.onPageFinished(view, loadedUrl)
                                 isLoading = false
-                                loadedUrl?.let { 
-                                    // Format clean URL for address bar
+                                loadedUrl?.let {
                                     urlInput = it.removePrefix("https://").removePrefix("http://").removeSuffix("/")
                                 }
                             }
                         }
-                        
+
                         webChromeClient = object : WebChromeClient() {
                             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                                 isLoading = newProgress < 100
                             }
                         }
-                        
+
                         loadUrl(url)
                         webView = this
                     }
@@ -229,43 +250,105 @@ fun BrowserScreen(
                         .padding(bottom = 80.dp)
                 ) {
                     Text(
-                        text = "Download Options",
+                        text = "ডাউনলোড অপশনসমূহ",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
 
                     if (downloaderViewModel.isExtracting.value) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 16.dp)
+                        ) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.width(16.dp))
-                            Text("Extracting media links via Multi-Layer Engine...")
+                            Text("মাল্টি-লেয়ার ডাউনলোডার ইঞ্জিন ফাইল ও লিংক এক্সট্র্যাক্ট করছে...")
                         }
                     } else if (downloaderViewModel.errorMessage.value != null) {
                         Text(
                             text = downloaderViewModel.errorMessage.value ?: "Unknown error",
-                            color = MaterialTheme.colorScheme.error
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(vertical = 12.dp)
                         )
                     } else if (downloaderViewModel.availableDownloads.isEmpty()) {
-                        Text("No downloadable media found on this page.")
+                        Text(
+                            text = "এই পেজে কোনো ডাউনলোড করার মতো অডিও/ভিডিও বা ফাইল খুঁজে পাওয়া যায়নি।",
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
                     } else {
                         LazyColumn {
                             items(downloaderViewModel.availableDownloads) { option ->
-                                ListItem(
-                                    headlineContent = { 
-                                        Text(option.quality, fontWeight = FontWeight.SemiBold) 
-                                    },
-                                    supportingContent = { 
-                                        Text(option.title, maxLines = 1) 
-                                    },
-                                    leadingContent = { 
-                                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) 
-                                    },
-                                    modifier = Modifier.clickable {
-                                        downloaderViewModel.startDownload(context, option)
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                        .clickable {
+                                            downloaderViewModel.startDownload(context, option)
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Badge Icon Container
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.primaryContainer,
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.size(48.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = option.formatBadge,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.width(12.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = option.quality,
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = option.title,
+                                                maxLines = 1,
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            val sizeText = option.getFormattedSize()
+                                            if (sizeText != null) {
+                                                Text(
+                                                    text = "সাইজ: $sizeText",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+
+                                        IconButton(
+                                            onClick = { downloaderViewModel.startDownload(context, option) }
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Download,
+                                                contentDescription = "Download Now",
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
                                     }
-                                )
-                                HorizontalDivider()
+                                }
                             }
                         }
                     }

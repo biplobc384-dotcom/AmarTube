@@ -26,6 +26,10 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 
+import android.app.Activity
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,20 +43,24 @@ fun PlayerScreen(
     onRelatedVideoClick: (String) -> Unit
 ) {
     val context = LocalContext.current
+    var isBackgroundPlayEnabled by remember { mutableStateOf(false) }
+    
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     
     LaunchedEffect(url) {
         viewModel.loadVideo(url)
     }
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().background(MaterialTheme.colorScheme.background)) {
+    Column(modifier = Modifier.fillMaxSize().let { if (isLandscape) it else it.statusBarsPadding() }.background(MaterialTheme.colorScheme.background)) {
         
         // --- 1. VIDEO PLAYER SECTION (Fixed at Top) ---
         if (viewModel.isLoading.value) {
-            Box(modifier = Modifier.fillMaxWidth().aspectRatio(16f/9f).background(Color.Black), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 200.dp).background(Color.Black), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
         } else if (viewModel.error.value != null) {
-            Box(modifier = Modifier.fillMaxWidth().aspectRatio(16f/9f).background(Color.Black), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 200.dp).background(Color.Black), contentAlignment = Alignment.Center) {
                 Text(text = "Error: ${viewModel.error.value}", color = Color.Red, modifier = Modifier.padding(16.dp))
             }
         } else {
@@ -60,6 +68,7 @@ fun PlayerScreen(
             if (playUrl != null) {
                 val mediaController = com.arifur.amartube.core.rememberMediaController()
                 
+
                 LaunchedEffect(playUrl, mediaController) {
                     val controller = mediaController
                     if (controller != null) {
@@ -69,54 +78,97 @@ fun PlayerScreen(
                         controller.playWhenReady = true
                     }
                 }
+                
+                // Pause playback when leaving the screen
+                DisposableEffect(mediaController, isBackgroundPlayEnabled) {
+                    onDispose {
+                        if (!isBackgroundPlayEnabled) {
+                            mediaController?.pause()
+                        }
+                    }
+                }
+                
+                // Pause playback when the app goes into the background
+                val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner, mediaController, isBackgroundPlayEnabled) {
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+                            if (!isBackgroundPlayEnabled) {
+                                mediaController?.pause()
+                            }
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
+                }
 
                 val currentController = mediaController
                 if (currentController != null) {
-                    AndroidView(
-                        factory = { context ->
-                            val view = PlayerView(context).apply {
-                                player = currentController
-                                setShowNextButton(false)
-                                setShowPreviousButton(false)
-                                setShowRewindButton(true)
-                                setShowFastForwardButton(true)
-                                setShowSubtitleButton(true)
-                                controllerShowTimeoutMs = 3000
-                                controllerHideOnTouch = true
-                                setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                    Box(modifier = if (isLandscape) {
+                        Modifier.fillMaxSize().background(Color.Black)
+                    } else {
+                        Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black)
+                    }) {
+                        AndroidView(
+                            factory = { ctx ->
+                                val view = PlayerView(ctx)
+                                view.apply {
+                                    layoutParams = android.view.ViewGroup.LayoutParams(
+                                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                                    )
+                                    player = currentController
+                                    useController = false
+                                }
+                                view
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+
+                        CustomPlayerUI(
+                            player = currentController,
+                            isLandscape = isLandscape,
+                            onToggleFullscreen = {
+                                val activity = context as? Activity
+                                if (isLandscape) {
+                                    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                } else {
+                                    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                                }
                             }
-                            view
-                        },
-                        modifier = Modifier.fillMaxWidth().aspectRatio(16f/9f).background(Color.Black)
-                    )
+                        )
+                    }
                 }
             }
         }
 
         // --- 2. SCROLLABLE DETAILS & ALGORITHM RECOMMENDATIONS ---
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        if (!isLandscape) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
             
             // Video Details Section
             item {
-                Column(modifier = Modifier.padding(top = 12.dp, start = 12.dp, end = 12.dp)) {
+                Column(modifier = Modifier.padding(top = 8.dp, start = 8.dp, end = 8.dp)) {
                     // Title
                     Text(
                         text = viewModel.videoTitle.value, 
-                        style = MaterialTheme.typography.titleMedium, 
+                        style = MaterialTheme.typography.bodyMedium, 
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     
                     // View Count & Date
                     Text(
                         text = "${formatViewCount(viewModel.viewCount.value)} views • ${viewModel.uploadDate.value}",
-                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     
                     // Channel Row
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -125,59 +177,76 @@ fun PlayerScreen(
                             AsyncImage(
                                 model = viewModel.uploaderAvatarUrl.value,
                                 contentDescription = "Avatar",
-                                modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.Gray)
+                                modifier = Modifier.size(28.dp).clip(CircleShape).background(Color.Gray)
                             )
                         } else {
                             Box(
-                                modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                                modifier = Modifier.size(28.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = viewModel.channelName.value.take(1).uppercase(),
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
+                                    fontSize = 12.sp
                                 )
                             }
                         }
                         
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = viewModel.channelName.value, 
-                                style = MaterialTheme.typography.bodyMedium, 
+                                style = MaterialTheme.typography.bodySmall, 
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onBackground
                             )
                             Text(
                                 text = "${viewModel.subCount.value} subscribers", 
-                                style = MaterialTheme.typography.bodySmall, 
+                                fontSize = 10.sp, 
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     
-                    // Action Buttons Row (Download Only)
+                    // Action Buttons Row (Download & Background Play)
                     androidx.compose.foundation.lazy.LazyRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // Background Play Button
+                        item {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp), 
+                                color = if (isBackgroundPlayEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                modifier = Modifier.clickable {
+                                    isBackgroundPlayEnabled = !isBackgroundPlayEnabled
+                                }
+                            ) {
+                                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(if (isBackgroundPlayEnabled) Icons.Default.PlayArrow else Icons.Default.Headphones, contentDescription = "Background Play", modifier = Modifier.size(14.dp), tint = if (isBackgroundPlayEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(if (isBackgroundPlayEnabled) "Background: ON" else "Background: OFF", fontWeight = FontWeight.Medium, fontSize = 11.sp, color = if (isBackgroundPlayEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground)
+                                }
+                            }
+                        }
+                        
                         // Download Button
                         item {
                             Surface(
-                                shape = RoundedCornerShape(24.dp), 
+                                shape = RoundedCornerShape(16.dp), 
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                                 modifier = Modifier.clickable {
                                     downloaderViewModel.extractDownloadLinks(url)
                                 }
                             ) {
-                                Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Download", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onBackground)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Download", fontWeight = FontWeight.Medium, fontSize = 13.sp, color = MaterialTheme.colorScheme.onBackground)
+                                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Download", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onBackground)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Download", fontWeight = FontWeight.Medium, fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground)
                                 }
                             }
                         }
@@ -193,6 +262,7 @@ fun PlayerScreen(
                 YoutubeVideoItem(item = item, onClick = { onRelatedVideoClick(item.url) })
             }
         }
+        } // Close if (!isLandscape)
         
         // Download Bottom Sheet
         if (downloaderViewModel.showDownloadSheet.value) {

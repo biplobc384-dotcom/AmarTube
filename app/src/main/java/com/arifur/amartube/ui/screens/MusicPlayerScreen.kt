@@ -28,7 +28,12 @@ import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MusicPlayerScreen(url: String, viewModel: PlayerViewModel = viewModel(), onBack: () -> Unit) {
+fun MusicPlayerScreen(
+    url: String, 
+    viewModel: PlayerViewModel = viewModel(), 
+    downloaderViewModel: DownloaderViewModel = viewModel(),
+    onBack: () -> Unit
+) {
     LaunchedEffect(url) {
         viewModel.loadVideo(url)
     }
@@ -135,21 +140,38 @@ fun MusicPlayerScreen(url: String, viewModel: PlayerViewModel = viewModel(), onB
                     IconButton(onClick = { /* Like */ }) {
                         Icon(Icons.Default.ThumbUp, contentDescription = "Like", tint = Color.White)
                     }
+                    TextButton(onClick = { downloaderViewModel.extractDownloadLinks(url) }) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Download", tint = Color.White)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Download", color = Color.White)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Dummy Progress Bar
-                var progress by remember { mutableStateOf(0f) }
-                LaunchedEffect(isPlaying) {
-                    while(isPlaying) {
-                        delay(1000)
-                        if (progress < 1f) progress += 0.01f
+                var currentPosition by remember { mutableStateOf(0L) }
+                var duration by remember { mutableStateOf(0L) }
+                
+                LaunchedEffect(mediaController) {
+                    while (true) {
+                        if (mediaController != null) {
+                            currentPosition = mediaController.currentPosition
+                            val d = mediaController.duration
+                            if (d > 0) duration = d
+                        }
+                        delay(500)
                     }
                 }
+                
+                val progress = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+                
                 Slider(
                     value = progress,
-                    onValueChange = { progress = it },
+                    onValueChange = { newProgress ->
+                        val newPosition = (newProgress * duration).toLong()
+                        mediaController?.seekTo(newPosition)
+                        currentPosition = newPosition
+                    },
                     colors = SliderDefaults.colors(
                         thumbColor = Color.White,
                         activeTrackColor = Color.White,
@@ -157,6 +179,20 @@ fun MusicPlayerScreen(url: String, viewModel: PlayerViewModel = viewModel(), onB
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    val formatTime = { ms: Long ->
+                        val totalSeconds = ms / 1000
+                        val min = totalSeconds / 60
+                        val sec = totalSeconds % 60
+                        String.format("%02d:%02d", min, sec)
+                    }
+                    Text(text = formatTime(currentPosition), color = Color.LightGray, fontSize = 12.sp)
+                    Text(text = formatTime(duration), color = Color.LightGray, fontSize = 12.sp)
+                }
 
                 // Controls
                 Row(
@@ -171,7 +207,6 @@ fun MusicPlayerScreen(url: String, viewModel: PlayerViewModel = viewModel(), onB
                         Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = Color.White, modifier = Modifier.size(36.dp))
                     }
                     // Play/Pause Button
-                    val mediaController = com.arifur.amartube.core.rememberMediaController()
                     Box(
                         modifier = Modifier
                             .size(64.dp)
@@ -202,6 +237,68 @@ fun MusicPlayerScreen(url: String, viewModel: PlayerViewModel = viewModel(), onB
                     }
                     IconButton(onClick = { /* Repeat */ }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Repeat", tint = Color.Gray)
+                    }
+                }
+            }
+        }
+    }
+
+    // Download Bottom Sheet
+    val context = androidx.compose.ui.platform.LocalContext.current
+    if (downloaderViewModel.showDownloadSheet.value) {
+        ModalBottomSheet(
+            onDismissRequest = { downloaderViewModel.showDownloadSheet.value = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .padding(bottom = 80.dp)
+            ) {
+                Text(
+                    text = "Download Options",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                if (downloaderViewModel.isExtracting.value) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("Extracting media links via NewPipe Engine...")
+                    }
+                } else if (downloaderViewModel.errorMessage.value != null) {
+                    Text(
+                        text = downloaderViewModel.errorMessage.value ?: "Unknown error",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else if (downloaderViewModel.availableDownloads.isEmpty()) {
+                    Text("No downloadable media found.")
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn {
+                        items(downloaderViewModel.availableDownloads.size) { index ->
+                            val option = downloaderViewModel.availableDownloads[index]
+                            ListItem(
+                                headlineContent = { 
+                                    Text(option.quality, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground) 
+                                },
+                                supportingContent = { 
+                                    Column {
+                                        Text(option.title, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("File size calculated on download.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                                    }
+                                },
+                                leadingContent = { 
+                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.primary) 
+                                },
+                                modifier = Modifier.clickable {
+                                    downloaderViewModel.startDownload(context, option)
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        }
                     }
                 }
             }

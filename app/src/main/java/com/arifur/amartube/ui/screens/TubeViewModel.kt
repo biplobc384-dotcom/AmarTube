@@ -18,8 +18,37 @@ class TubeViewModel : ViewModel() {
     val isLoadingMore = mutableStateOf(false)
     val errorMessage = mutableStateOf<String?>(null)
     
+    val isNetworkError = mutableStateOf(false)
+    
     private var currentQuery: String = ""
     private var nextPage: Page? = null
+    
+    val searchSuggestions = mutableStateListOf<String>()
+    private var suggestionJob: kotlinx.coroutines.Job? = null
+
+    fun onSearchQueryChanged(query: String) {
+        searchQuery.value = query
+        if (query.isBlank()) {
+            searchSuggestions.clear()
+            return
+        }
+        suggestionJob?.cancel()
+        suggestionJob = viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(300) // Debounce
+            try {
+                val extractor = ServiceList.YouTube.suggestionExtractor
+                val suggestions = extractor.suggestionList(query)
+                searchSuggestions.clear()
+                searchSuggestions.addAll(suggestions)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+    
+    fun clearSuggestions() {
+        searchSuggestions.clear()
+    }
 
     fun searchVideos(query: String, isUserQuery: Boolean = true) {
         if (query.isBlank()) return
@@ -31,6 +60,7 @@ class TubeViewModel : ViewModel() {
         }
         isLoading.value = true
         errorMessage.value = null
+        isNetworkError.value = false
         searchResults.clear()
         nextPage = null
 
@@ -45,7 +75,12 @@ class TubeViewModel : ViewModel() {
                 searchResults.addAll(items)
             } catch (e: Exception) {
                 e.printStackTrace()
-                errorMessage.value = e.message ?: "An error occurred fetching data."
+                if (e is java.net.UnknownHostException || e is java.net.ConnectException || e is java.net.SocketTimeoutException || e.message?.contains("Unable to resolve host") == true) {
+                    isNetworkError.value = true
+                    errorMessage.value = "No network"
+                } else {
+                    errorMessage.value = e.message ?: "An error occurred fetching data."
+                }
             } finally {
                 isLoading.value = false
             }

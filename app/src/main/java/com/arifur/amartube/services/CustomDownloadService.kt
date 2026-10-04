@@ -19,12 +19,18 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 class CustomDownloadService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val activeDownloads = ConcurrentHashMap<String, Job>()
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build()
 
     override fun onCreate() {
         super.onCreate()
@@ -52,20 +58,26 @@ class CustomDownloadService : Service() {
 
         val job = serviceScope.launch {
             try {
-                val request = Request.Builder().url(url).build()
-                val response: Response = client.newCall(request).execute()
-                
-                if (!response.isSuccessful) throw Exception("Failed to connect")
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                    .build()
 
-                val body = response.body ?: throw Exception("Empty body")
+                val response: Response = client.newCall(request).execute()
+
+                if (!response.isSuccessful) throw Exception("Server returned code ${response.code}")
+
+                val body = response.body ?: throw Exception("Empty response body")
                 val totalBytes = body.contentLength()
                 val inputStream: InputStream = body.byteStream()
-                
+
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (!downloadsDir.exists()) downloadsDir.mkdirs()
+
                 val outputFile = File(downloadsDir, fileName)
                 val outputStream = FileOutputStream(outputFile)
 
-                val buffer = ByteArray(8 * 1024)
+                val buffer = ByteArray(16 * 1024)
                 var bytesCopied: Long = 0
                 var bytesRead: Int
                 var lastUpdateTime = 0L
@@ -81,16 +93,16 @@ class CustomDownloadService : Service() {
                         val progress = if (totalBytes > 0) (bytesCopied * 100 / totalBytes).toInt() else 0
                         val downloadedMB = bytesCopied / (1024 * 1024)
                         val totalMB = totalBytes / (1024 * 1024)
-                        val sizeText = if (totalMB > 0) "${downloadedMB}MB / ${totalMB}MB" else "${downloadedMB}MB"
-                        
+                        val sizeText = if (totalMB > 0) "${downloadedMB}MB / ${totalMB}MB ($progress%)" else "${downloadedMB}MB"
+
                         updateNotification(notificationId, createNotification(title, progress, sizeText, url))
                     }
                 }
-                
+
                 outputStream.flush()
                 outputStream.close()
                 inputStream.close()
-                
+
                 if (isActive) {
                     updateNotification(notificationId, createFinishedNotification(title, fileName))
                 } else {
@@ -139,7 +151,7 @@ class CustomDownloadService : Service() {
     private fun createFinishedNotification(title: String, fileName: String): Notification {
         return NotificationCompat.Builder(this, "AMARTUBE_DOWNLOAD")
             .setContentTitle("Download Complete")
-            .setContentText(title)
+            .setContentText("$title ($fileName)")
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setAutoCancel(true)
             .build()
@@ -172,7 +184,7 @@ class CustomDownloadService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-    
+
     override fun onDestroy() {
         serviceScope.cancel()
         super.onDestroy()

@@ -1,7 +1,9 @@
 package com.arifur.amartube.ui.screens
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,16 +18,100 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.arifur.amartube.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     val context = LocalContext.current
+
+    var showQualityDialog by remember { mutableStateOf(false) }
+    var showStorageDialog by remember { mutableStateOf(false) }
+
+    if (showQualityDialog) {
+        AlertDialog(
+            onDismissRequest = { showQualityDialog = false },
+            title = { Text("Download Quality") },
+            text = {
+                Column {
+                    val options = listOf("Ask each time", "1080p", "720p", "480p", "360p", "Audio only")
+                    options.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.downloadQuality.value = option
+                                    showQualityDialog = false
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = viewModel.downloadQuality.value == option,
+                                onClick = {
+                                    viewModel.downloadQuality.value = option
+                                    showQualityDialog = false
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(option)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showQualityDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showStorageDialog) {
+        AlertDialog(
+            onDismissRequest = { showStorageDialog = false },
+            title = { Text("Storage Location") },
+            text = {
+                Column {
+                    val options = listOf("Internal Storage", "SD Card")
+                    options.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.storageLocation.value = option
+                                    showStorageDialog = false
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = viewModel.storageLocation.value == option,
+                                onClick = {
+                                    viewModel.storageLocation.value = option
+                                    showStorageDialog = false
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(option)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showStorageDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -53,19 +139,19 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                         .padding(vertical = 12.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
-                    Box(
+                    Image(
+                        painter = painterResource(id = R.drawable.user_avatar),
+                        contentDescription = "User Avatar",
                         modifier = Modifier
                             .size(56.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF2A2A2A)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("U", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    }
+                        contentScale = ContentScale.Crop
+                    )
                     Spacer(modifier = Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("User Name", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                        Text("user@example.com", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("User Mayaboti", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                        Text("mayaboti@example.com", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -83,11 +169,129 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 
                 SettingsSectionTitle("Downloads")
                 SettingsCard {
-                    SettingsItem(icon = Icons.Default.KeyboardArrowDown, title = "Download Quality", subtitle = "Ask each time")
+                    SettingsItem(
+                        icon = Icons.Default.KeyboardArrowDown, 
+                        title = "Download Quality", 
+                        subtitle = viewModel.downloadQuality.value,
+                        onClick = { showQualityDialog = true }
+                    )
                     HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(start = 56.dp))
-                    SettingsItem(icon = Icons.Default.Info, title = "Storage Location", subtitle = "Internal Storage (45GB free)")
+                    SettingsItem(
+                        icon = Icons.Default.Info, 
+                        title = "Storage Location", 
+                        subtitle = viewModel.storageLocation.value,
+                        onClick = { showStorageDialog = true }
+                    )
                 }
                 
+                SettingsSectionTitle("Open Source Engines")
+                SettingsCard {
+                    SettingsLinkItem(
+                        icon = Icons.Default.Code,
+                        title = "NewPipeExtractor",
+                        subtitle = "Extracts data from YouTube",
+                        url = "https://github.com/TeamNewPipe/NewPipeExtractor",
+                        context = context
+                    )
+                    HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(start = 56.dp))
+                    SettingsLinkItem(
+                        icon = Icons.Default.PlayArrow,
+                        title = "Jetpack Media3 (ExoPlayer)",
+                        subtitle = "Video and audio playback",
+                        url = "https://github.com/androidx/media",
+                        context = context
+                    )
+                    HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(start = 56.dp))
+                    SettingsLinkItem(
+                        icon = Icons.Default.Image,
+                        title = "Coil",
+                        subtitle = "Image loading",
+                        url = "https://github.com/coil-kt/coil",
+                        context = context
+                    )
+                    HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(start = 56.dp))
+                    SettingsLinkItem(
+                        icon = Icons.Default.NetworkCell,
+                        title = "OkHttp",
+                        subtitle = "Networking",
+                        url = "https://github.com/square/okhttp",
+                        context = context
+                    )
+                }
+
+                SettingsSectionTitle("Developer")
+                SettingsCard {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Image(
+                            painter = painterResource(id = R.drawable.developer_image),
+                            contentDescription = "Developer Profile",
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Arifur",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = "App Developer & Maintainer",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                    
+                    HorizontalDivider(color = Color(0x14FFFFFF))
+                    SettingsLinkItem(
+                        icon = Icons.Default.Group,
+                        title = "Telegram Group",
+                        subtitle = "Join our community",
+                        url = "https://t.me/ArifurHackworld",
+                        context = context
+                    )
+                    HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(start = 56.dp))
+                    SettingsLinkItem(
+                        icon = Icons.Default.Campaign,
+                        title = "Telegram Channel",
+                        subtitle = "Get latest updates",
+                        url = "https://t.me/ArifurHack",
+                        context = context
+                    )
+                    HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(start = 56.dp))
+                    SettingsLinkItem(
+                        icon = Icons.Default.Person,
+                        title = "Telegram Direct",
+                        subtitle = "@arifur905",
+                        url = "https://t.me/arifur905",
+                        context = context
+                    )
+                    HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(start = 56.dp))
+                    SettingsLinkItem(
+                        icon = Icons.Default.ThumbUp,
+                        title = "Facebook",
+                        subtitle = "Connect on Facebook",
+                        url = "https://www.facebook.com/fary.pol",
+                        context = context
+                    )
+                    HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(start = 56.dp))
+                    SettingsLinkItem(
+                        icon = Icons.Default.Code,
+                        title = "GitHub",
+                        subtitle = "View my projects",
+                        url = "https://github.com/biplobc384-dotcom/biplobc384-dotcom",
+                        context = context
+                    )
+                }
+
                 SettingsSectionTitle("About & Updates")
                 SettingsCard {
                     SettingsItem(
@@ -162,11 +366,11 @@ fun SettingsSectionTitle(title: String) {
 }
 
 @Composable
-fun SettingsItem(icon: ImageVector, title: String, subtitle: String) {
+fun SettingsItem(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* TODO */ }
+            .clickable { onClick() }
             .padding(16.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
     ) {
@@ -177,6 +381,28 @@ fun SettingsItem(icon: ImageVector, title: String, subtitle: String) {
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+fun SettingsLinkItem(icon: ImageVector, title: String, subtitle: String, url: String, context: Context) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { 
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                context.startActivity(intent)
+            }
+            .padding(16.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.Default.OpenInNew, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

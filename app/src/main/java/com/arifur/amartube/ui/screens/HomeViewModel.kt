@@ -18,18 +18,21 @@ class HomeViewModel : ViewModel() {
     val isLoadingMore = mutableStateOf(false)
     val errorMessage = mutableStateOf<String?>(null)
     
+    val isNetworkError = mutableStateOf(false)
+    
     private var nextPage: Page? = null
     
     init {
         fetchTrending()
     }
 
-    fun fetchTrending() {
-        if (trendingVideos.isNotEmpty()) return
+    fun fetchTrending(forceRefresh: Boolean = false) {
+        if (trendingVideos.isNotEmpty() && !forceRefresh) return
         
         isLoading.value = true
         errorMessage.value = null
-        trendingVideos.clear()
+        isNetworkError.value = false
+        if (forceRefresh) trendingVideos.clear()
         nextPage = null
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -48,7 +51,12 @@ class HomeViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                fallbackSearch()
+                if (e is java.net.UnknownHostException || e is java.net.ConnectException || e is java.net.SocketTimeoutException) {
+                    isNetworkError.value = true
+                    errorMessage.value = "No network"
+                } else {
+                    fallbackSearch()
+                }
             } finally {
                 isLoading.value = false
             }
@@ -62,7 +70,12 @@ class HomeViewModel : ViewModel() {
             nextPage = searchInfo.nextPage
             trendingVideos.addAll(searchInfo.relatedItems.filterIsInstance<StreamInfoItem>())
         } catch (e: Exception) {
-            errorMessage.value = e.message ?: "Failed to load Home Feed"
+            if (e is java.net.UnknownHostException || e is java.net.ConnectException || e is java.net.SocketTimeoutException || e.message?.contains("Unable to resolve host") == true) {
+                isNetworkError.value = true
+                errorMessage.value = "No network"
+            } else {
+                errorMessage.value = e.message ?: "Failed to load Home Feed"
+            }
         }
     }
     
