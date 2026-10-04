@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
                 } catch (e: Exception) {
                     "1.0"
                 }
-                updateInfo = UpdateManager.getInstance().checkForUpdate(currentVersionName)
+                updateInfo = UpdateManager.getInstance().checkForUpdate(context, currentVersionName)
             }
 
             val info = updateInfo

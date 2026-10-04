@@ -3,7 +3,6 @@ package com.arifur.amartube.core
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +32,21 @@ class UpdateManager private constructor() {
         .followSslRedirects(true)
         .build()
 
-    suspend fun checkForUpdate(currentVersionName: String): AppUpdateInfo? = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdate(
+        context: Context,
+        currentVersionName: String,
+        forceCheck: Boolean = false
+    ): AppUpdateInfo? = withContext(Dispatchers.IO) {
+        val prefs = context.getSharedPreferences("amartube_update_prefs", Context.MODE_PRIVATE)
+        val lastCheckTime = prefs.getLong("last_check_time", 0L)
+        val now = System.currentTimeMillis()
+        val twelveHours = 12 * 60 * 60 * 1000L // 12 hours throttle
+
+        // If checked less than 12 hours ago and forceCheck is false, skip network call to prevent rate limits
+        if (!forceCheck && (now - lastCheckTime < twelveHours)) {
+            return@withContext null
+        }
+
         try {
             val apiUrl = "https://api.github.com/repos/biplobc384-dotcom/AmarTube/releases/latest"
             val request = Request.Builder()
@@ -70,6 +83,9 @@ class UpdateManager private constructor() {
                 }
 
                 val isNewer = isVersionNewer(tagName, currentVersionName)
+
+                // Save successful check timestamp
+                prefs.edit().putLong("last_check_time", now).apply()
 
                 return@withContext AppUpdateInfo(
                     version = if (tagName.isNotBlank()) tagName else "1.0",
