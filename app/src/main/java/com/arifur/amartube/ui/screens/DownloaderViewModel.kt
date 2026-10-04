@@ -62,7 +62,7 @@ class DownloaderViewModel : ViewModel() {
                         availableDownloads.add(
                             DownloadOption(
                                 title = title,
-                                quality = "${stream.resolution} (${stream.format.name()}) - Video + Audio",
+                                quality = "${stream.resolution} (${stream.format?.name ?: ""}) - Video + Audio",
                                 downloadUrl = stream.content
                             )
                         )
@@ -73,7 +73,7 @@ class DownloaderViewModel : ViewModel() {
                         availableDownloads.add(
                             DownloadOption(
                                 title = title,
-                                quality = "Audio ${stream.averageBitrate}kbps (${stream.format.name()})",
+                                quality = "Audio ${stream.averageBitrate}kbps (${stream.format?.name ?: ""})",
                                 downloadUrl = stream.content,
                                 isAudioOnly = true
                             )

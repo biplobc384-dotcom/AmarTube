@@ -5,11 +5,13 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -75,7 +77,7 @@ fun BrowserScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(44.dp)
-                                .androidx.compose.foundation.background(Color(0x14FFFFFF), RoundedCornerShape(9999.dp))
+                                .background(Color(0x14FFFFFF), RoundedCornerShape(9999.dp))
                                 .padding(horizontal = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -85,7 +87,7 @@ fun BrowserScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             
                             // URL Text Field
-                            androidx.compose.foundation.text.BasicTextField(
+                            BasicTextField(
                                 value = urlInput,
                                 onValueChange = { urlInput = it },
                                 modifier = Modifier.weight(1f),

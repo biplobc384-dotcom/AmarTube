@@ -1,6 +1,7 @@
 package com.arifur.amartube.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,6 +29,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
+@androidx.media3.common.util.UnstableApi
 @Composable
 fun PlayerScreen(
     url: String, 
