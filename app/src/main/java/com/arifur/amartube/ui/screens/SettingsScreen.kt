@@ -376,7 +376,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Arifur",
+                            text = "Arifur Jaman",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
