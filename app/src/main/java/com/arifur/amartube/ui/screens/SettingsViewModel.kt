@@ -1,71 +1,56 @@
 package com.arifur.amartube.ui.screens
 
+import android.content.Context
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arifur.amartube.core.AppUpdateInfo
+import com.arifur.amartube.core.UpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
 
 class SettingsViewModel : ViewModel() {
-    val currentVersion = "1.0.0"
+    var currentVersion = "1.0"
     val isCheckingUpdate = mutableStateOf(false)
     val updateMessage = mutableStateOf<String?>(null)
-    val latestVersion = mutableStateOf<String?>(null)
-    val downloadUrl = mutableStateOf<String?>(null)
-    
+    val appUpdateInfo = mutableStateOf<AppUpdateInfo?>(null)
+    val showNoUpdateDialog = mutableStateOf(false)
+
     val downloadQuality = mutableStateOf("Ask each time")
     val storageLocation = mutableStateOf("Internal Storage")
 
-    private val client = OkHttpClient()
-
-    fun checkForUpdates() {
+    fun checkForUpdates(context: Context) {
         if (isCheckingUpdate.value) return
-        
+
         isCheckingUpdate.value = true
         updateMessage.value = null
-        
+        appUpdateInfo.value = null
+
+        val currentVersionName = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
+        } catch (_: Exception) {
+            "1.0"
+        }
+        currentVersion = currentVersionName
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Replace with your actual GitHub Repo (e.g., username/AmarTube)
-                // Using a placeholder repo string, which should be updated before release
-                val url = "https://api.github.com/repos/Arifur/AmarTube/releases/latest"
-                val request = Request.Builder().url(url).build()
-                val response = client.newCall(request).execute()
-                
-                if (response.isSuccessful) {
-                    val responseBody = response.body?.string()
-                    if (responseBody != null) {
-                        val json = JSONObject(responseBody)
-                        val tagName = json.getString("tag_name").replace("v", "")
-                        
-                        // Basic semantic version check
-                        if (tagName > currentVersion) {
-                            latestVersion.value = tagName
-                            updateMessage.value = "New update available: v$tagName!"
-                            
-                            val assets = json.getJSONArray("assets")
-                            if (assets.length() > 0) {
-                                downloadUrl.value = assets.getJSONObject(0).getString("browser_download_url")
-                            } else {
-                                updateMessage.value = "New update found, but no APK attached."
-                            }
-                        } else {
-                            updateMessage.value = "You are on the latest version."
-                        }
-                    }
+                val info = UpdateManager.getInstance().checkForUpdate(
+                    context = context,
+                    currentVersionName = currentVersionName,
+                    forceCheck = true
+                )
+
+                if (info != null && info.isUpdateAvailable) {
+                    appUpdateInfo.value = info
+                    updateMessage.value = "নতুন আপডেট পাওয়া গেছে: v${info.version}"
                 } else {
-                    if (response.code == 404) {
-                        updateMessage.value = "No releases found on GitHub yet."
-                    } else {
-                        updateMessage.value = "Update check failed (Code: ${response.code})"
-                    }
+                    showNoUpdateDialog.value = true
+                    updateMessage.value = "আপনি সর্বশেষ ভার্সনে আছেন (v$currentVersionName)"
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                updateMessage.value = "Error checking for updates."
+                updateMessage.value = "আপডেট চেক করতে সমস্যা হয়েছে"
             } finally {
                 isCheckingUpdate.value = false
             }

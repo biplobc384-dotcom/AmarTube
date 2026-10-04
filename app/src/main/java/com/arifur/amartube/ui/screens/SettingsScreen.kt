@@ -8,7 +8,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -26,14 +29,150 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.arifur.amartube.R
+import com.arifur.amartube.core.UpdateManager
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     var showQualityDialog by remember { mutableStateOf(false) }
     var showStorageDialog by remember { mutableStateOf(false) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(-1) }
+
+    // Dialog for when NO updates are found (User is on latest version)
+    if (viewModel.showNoUpdateDialog.value) {
+        AlertDialog(
+            onDismissRequest = { viewModel.showNoUpdateDialog.value = false },
+            shape = RoundedCornerShape(16.dp),
+            title = {
+                Text(
+                    text = "🎉 আপনি আপডেট আছেন!",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text(
+                    text = "আপনি অ্যাপের সর্বশেষ ভার্সনে আছেন (v${viewModel.currentVersion})। নতুন কোনো আপডেট পাওয়া যায়নি।",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.showNoUpdateDialog.value = false }) {
+                    Text("ঠিক আছে")
+                }
+            }
+        )
+    }
+
+    // Dialog for when an UPDATE is available
+    val updateInfo = viewModel.appUpdateInfo.value
+    if (updateInfo != null && updateInfo.isUpdateAvailable) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isDownloading) viewModel.appUpdateInfo.value = null
+            },
+            shape = RoundedCornerShape(16.dp),
+            title = {
+                Text(
+                    text = "🎉 নতুন আপডেট এসেছে! (v${updateInfo.version})",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        text = updateInfo.releaseTitle,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 140.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text(
+                            text = updateInfo.releaseNotes,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (isDownloading) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            if (downloadProgress >= 0) {
+                                LinearProgressIndicator(
+                                    progress = { downloadProgress / 100f },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "APK ডাউনলোড হচ্ছে... $downloadProgress%",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            } else {
+                                LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "APK সংযোগ ও ডাউনলোড হচ্ছে...",
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !isDownloading && updateInfo.apkUrl.isNotBlank(),
+                    onClick = {
+                        isDownloading = true
+                        coroutineScope.launch {
+                            val success = UpdateManager.getInstance().downloadAndInstallApk(
+                                context = context,
+                                apkUrl = updateInfo.apkUrl,
+                                onProgress = { percent ->
+                                    downloadProgress = percent
+                                }
+                            )
+                            isDownloading = false
+                            if (success) {
+                                viewModel.appUpdateInfo.value = null
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (isDownloading) "ডাউনলোড হচ্ছে..." else "এখন আপডেট করুন")
+                }
+            },
+            dismissButton = {
+                if (!isDownloading) {
+                    TextButton(onClick = { viewModel.appUpdateInfo.value = null }) {
+                        Text("পরে")
+                    }
+                }
+            }
+        )
+    }
 
     if (showQualityDialog) {
         AlertDialog(
@@ -131,13 +270,13 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
         ) {
             item {
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 // Account Section
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 12.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.user_avatar),
@@ -155,9 +294,9 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     }
                     Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 SettingsSectionTitle("General")
                 SettingsCard {
                     SettingsToggleItem(icon = Icons.Default.Settings, title = "Dark Theme", subtitle = "Reduce glare and improve night viewing", isChecked = true)
@@ -166,24 +305,24 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(start = 56.dp))
                     SettingsItem(icon = Icons.Default.CheckCircle, title = "Language", subtitle = "English")
                 }
-                
+
                 SettingsSectionTitle("Downloads")
                 SettingsCard {
                     SettingsItem(
-                        icon = Icons.Default.KeyboardArrowDown, 
-                        title = "Download Quality", 
+                        icon = Icons.Default.KeyboardArrowDown,
+                        title = "Download Quality",
                         subtitle = viewModel.downloadQuality.value,
                         onClick = { showQualityDialog = true }
                     )
                     HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(start = 56.dp))
                     SettingsItem(
-                        icon = Icons.Default.Info, 
-                        title = "Storage Location", 
+                        icon = Icons.Default.Info,
+                        title = "Storage Location",
                         subtitle = viewModel.storageLocation.value,
                         onClick = { showStorageDialog = true }
                     )
                 }
-                
+
                 SettingsSectionTitle("Open Source Engines")
                 SettingsCard {
                     SettingsLinkItem(
@@ -249,7 +388,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                     }
-                    
+
                     HorizontalDivider(color = Color(0x14FFFFFF))
                     SettingsLinkItem(
                         icon = Icons.Default.Group,
@@ -287,7 +426,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                         icon = Icons.Default.Code,
                         title = "GitHub",
                         subtitle = "View my projects",
-                        url = "https://github.com/biplobc384-dotcom/biplobc384-dotcom",
+                        url = "https://github.com/biplobc384-dotcom/AmarTube",
                         context = context
                     )
                 }
@@ -295,43 +434,36 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 SettingsSectionTitle("About & Updates")
                 SettingsCard {
                     SettingsItem(
-                        icon = Icons.Default.Info, 
-                        title = "App Version", 
+                        icon = Icons.Default.Info,
+                        title = "App Version",
                         subtitle = "v${viewModel.currentVersion}"
                     )
-                    
+
                     HorizontalDivider(color = Color(0x14FFFFFF), modifier = Modifier.padding(start = 56.dp))
-                    
+
                     // Check for Updates Item
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.checkForUpdates() }
+                            .clickable { viewModel.checkForUpdates(context) }
                             .padding(16.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        if (viewModel.isCheckingUpdate.value) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Check for Updates", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                             val statusText = if (viewModel.isCheckingUpdate.value) "Checking GitHub for updates..." else (viewModel.updateMessage.value ?: "Tap to check for latest GitHub release")
                             Text(statusText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                    }
-                }
-                
-                if (viewModel.downloadUrl.value != null) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(viewModel.downloadUrl.value))
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(100)
-                    ) {
-                        Text("Download v${viewModel.latestVersion.value}", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
             }
@@ -341,8 +473,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
 
 @Composable
 fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    androidx.compose.foundation.shape.RoundedCornerShape(16.dp).let { shape ->
-        androidx.compose.material3.Surface(
+    RoundedCornerShape(16.dp).let { shape ->
+        Surface(
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             shape = shape,
             color = MaterialTheme.colorScheme.surface,
@@ -372,7 +504,7 @@ fun SettingsItem(icon: ImageVector, title: String, subtitle: String, onClick: ()
             .fillMaxWidth()
             .clickable { onClick() }
             .padding(16.dp),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.width(16.dp))
@@ -389,12 +521,12 @@ fun SettingsLinkItem(icon: ImageVector, title: String, subtitle: String, url: St
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { 
+            .clickable {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                 context.startActivity(intent)
             }
             .padding(16.dp),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.width(16.dp))
@@ -414,7 +546,7 @@ fun SettingsToggleItem(icon: ImageVector, title: String, subtitle: String, isChe
             .fillMaxWidth()
             .clickable { checkedState = !checkedState }
             .padding(16.dp),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.width(16.dp))

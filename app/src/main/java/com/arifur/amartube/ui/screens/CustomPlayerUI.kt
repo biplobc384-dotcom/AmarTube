@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,10 +40,13 @@ fun CustomPlayerUI(
     var skipText by remember { mutableStateOf("") }
     var skipVisible by remember { mutableStateOf(false) }
     var skipDirection by remember { mutableIntStateOf(1) } // 1 for right, -1 for left
+    var playerError by remember { mutableStateOf<androidx.media3.common.PlaybackException?>(null) }
 
     // Auto-hide controls
-    LaunchedEffect(controlsVisible, isPlaying) {
-        if (controlsVisible && isPlaying) {
+    LaunchedEffect(controlsVisible, isPlaying, playerError) {
+        if (playerError != null) {
+            controlsVisible = true
+        } else if (controlsVisible && isPlaying) {
             kotlinx.coroutines.delay(3000)
             controlsVisible = false
         }
@@ -60,6 +64,7 @@ fun CustomPlayerUI(
             currentPosition = player.currentPosition
             duration = player.duration.coerceAtLeast(0L)
             isPlaying = player.isPlaying
+            playerError = player.playerError
             kotlinx.coroutines.delay(1000)
         }
     }
@@ -105,20 +110,40 @@ fun CustomPlayerUI(
                         )
                     )
             ) {
-                // Center Play/Pause
-                IconButton(
-                    onClick = {
-                        if (isPlaying) player.pause() else player.play()
-                        controlsVisible = true
-                    },
-                    modifier = Modifier.align(Alignment.Center).size(64.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = "Play/Pause",
-                        tint = Color.White,
-                        modifier = Modifier.size(48.dp)
-                    )
+                // Center Play/Pause or Refresh
+                if (playerError != null) {
+                    Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = { 
+                                player.prepare()
+                                player.play()
+                            },
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Retry",
+                                tint = Color.White,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                        Text("Network Error", color = Color.White, fontSize = 12.sp)
+                    }
+                } else {
+                    IconButton(
+                        onClick = {
+                            if (isPlaying) player.pause() else player.play()
+                            controlsVisible = true
+                        },
+                        modifier = Modifier.align(Alignment.Center).size(64.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = "Play/Pause",
+                            tint = Color.White,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
                 }
                 
                 // Bottom Bar

@@ -61,7 +61,13 @@ fun PlayerScreen(
             }
         } else if (viewModel.error.value != null) {
             Box(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 200.dp).background(Color.Black), contentAlignment = Alignment.Center) {
-                Text(text = "Error: ${viewModel.error.value}", color = Color.Red, modifier = Modifier.padding(16.dp))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(onClick = { viewModel.loadVideo(url) }) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White, modifier = Modifier.size(48.dp))
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = "Network Error. Tap to retry.", color = Color.White, fontSize = 14.sp)
+                }
             }
         } else {
             val playUrl = viewModel.streamUrl.value
